@@ -40,6 +40,8 @@ if config["channel_id"] == 0:
         json.dump(config, f)
 
 async def tip(amount: str):
+    amount = ''.join(i for i in amount if not i.isdigit())
+    amount = amount.replace(".", "").replace(", ", "").replace(" ", "")
     channel = client.get_channel(config["channel_id"])
     if channel is None:
         print("Channel is invalid.")
@@ -59,7 +61,7 @@ async def tip(amount: str):
     elif config["id"] == 0 or config["id"] == client.user.id:
         return
     try:
-        await channel.send(f"$tip {user.mention} {amount}")
+        await channel.send(f"$tip {user.mention} all {amount}")
     except discord.HTTPException:
         print("An HTTPException occured. The message has not been sent.")
         return
@@ -79,7 +81,7 @@ async def on_message(message):
             embed = message.embeds[0]
             try:
                 if "ended" in embed.footer.text.lower() and "Trivia time - " not in embed.title:
-                    return
+                    await tip(embed.description.split('**')[1])
                 elif "An airdrop appears" in embed.title:
                     comp = message.components
                     comp = comp[0].children
@@ -87,7 +89,6 @@ async def on_message(message):
                     if "Enter airdrop" in button.label:
                         await button.click()
                         print(f"Entered airdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}")
-                        await tip(embed.description.split('**')[1])
                 elif "Phrase drop!" in embed.title:
                     content = embed.description.replace("\n", "").replace("**", "")
                     content = content.split("*")
@@ -101,7 +102,6 @@ async def on_message(message):
                             await asyncio.sleep(length)
                         await message.channel.send(content)
                         print(f"Entered phrasedrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}")
-                        await tip(embed.description.split('**')[1])
                 elif "appeared" in embed.title:
                     comp = message.components
                     comp = comp[0].children
@@ -109,7 +109,6 @@ async def on_message(message):
                     if "envelope" in button.label:
                         await button.click()
                         print(f"Claimed envelope for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}")
-                        await tip(embed.description.split('**')[1])
             except AttributeError:
                 pass
             except discord.HTTPException:

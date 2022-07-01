@@ -6,6 +6,9 @@ import random
 import aiohttp
 import art
 import discord
+from discord.ext import tasks
+
+channel = None
 
 proxies = ["syd","tor","par","fra","lin","nrt","ams","waw","lis","sin","mad","sto","lon","iad","atl","chi","dal","den","lax","mia","nyc","sea","phx"]
 
@@ -39,40 +42,43 @@ if config["channel_id"] == 0:
     with open("config.json", 'w') as f:
         json.dump(config, f)
 
-async def tip(amount: str):
-    amount = ''.join(i for i in amount if not i.isdigit())
-    amount = amount.replace(".", "").replace(", ", "").replace(" ", "")
-    channel = client.get_channel(config["channel_id"])
-    if channel is None:
-        print("Channel is invalid.")
-        config["channel_id"] = 0
-        with open("config.json", 'w') as f:
-            json.dump(config, f)
-        return
-    elif config["channel_id"] == 1:
-        return
-    user = client.get_user(config["id"])
-    if user is None:
-        print("Main account is invalid.")
-        config["id"] = 0
-        with open("config.json", 'w') as f:
-            json.dump(config, f)
-        return
-    elif config["id"] == 0 or config["id"] == client.user.id:
-        return
-    try:
-        await channel.send(f"$tip {user.mention} all {amount}")
-    except discord.HTTPException:
-        print("An HTTPException occured. The message has not been sent.")
-        return
-    except discord.Forbidden:
-        print(f"The alt account does not have permission to send messages in {channel.name}.")
-        return
 
 @client.event
 async def on_ready():
+    global channel
+    channel = client.get_channel(config["channel_id"])
     print(f"Logged in as {client.user.name}#{client.user.discriminator} ({client.user.id})")
+    tipping.start()
 
+
+@tasks.loop(minutes=10.0)
+async def tipping():
+    await channel.send("$bals top")
+    answer = await client.wait_for('message', check=lambda
+                message: message.author.id == 617037497574359050 and message.embeds)
+    pages = int(answer.embeds[0].author.name.split('/')[1].replace(')',''))
+    page = 1
+    for page in range(pages):
+        button = answer.components[0].children[1]
+        for crypto in answer.embeds[0].fields:
+            if "Estimated total" in crypto.name:
+                pass
+            else:
+                content = f"$tip <@{config['id']}> {crypto.value.split('**')[1].replace(',','')}"
+                async with channel.typing():
+                    await asyncio.sleep(len(content) / config["CPM"] * 60)
+                await channel.send(content)
+        if button.disabled:
+            await answer.components[0].children[2].click()
+            return
+        await button.click()
+        await asyncio.sleep(1)
+        answer = await channel.fetch_message(answer.id)
+
+@tipping.before_loop
+async def before_tipping():
+    print('Waiting for bot to be ready before tipping starts...')
+    await client.wait_until_ready()
 
 @client.event
 async def on_message(message):
@@ -81,7 +87,7 @@ async def on_message(message):
             embed = message.embeds[0]
             try:
                 if "ended" in embed.footer.text.lower() and "Trivia time - " not in embed.title:
-                    await tip(embed.description.split('**')[1])
+                    return
                 elif "An airdrop appears" in embed.title:
                     comp = message.components
                     comp = comp[0].children

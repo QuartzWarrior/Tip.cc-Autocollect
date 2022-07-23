@@ -55,25 +55,46 @@ async def on_ready():
 async def tipping():
     await channel.send("$bals top")
     answer = await client.wait_for('message', check=lambda
-                message: message.author.id == 617037497574359050 and message.embeds)
-    pages = int(answer.embeds[0].author.name.split('/')[1].replace(')',''))
+        message: message.author.id == 617037497574359050 and message.embeds)
+    try:
+        pages = int(answer.embeds[0].author.name.split('/')[1].replace(')', ''))
+    except:
+        pages = 1
     page = 1
     for page in range(pages):
-        button = answer.components[0].children[1]
+        try:
+            button = answer.components[0].children[1]
+            if button.disabled:
+                button_disabled = True
+            else:
+                button_disabled = False
+        except:
+            button_disabled = True
         for crypto in answer.embeds[0].fields:
             if "Estimated total" in crypto.name:
                 pass
             else:
-                content = f"$tip <@{config['id']}> {crypto.value.split('**')[1].replace(',','')}"
-                async with channel.typing():
-                    await asyncio.sleep(len(content) / config["CPM"] * 60)
-                await channel.send(content)
-        if button.disabled:
-            await answer.components[0].children[2].click()
-            return
-        await button.click()
-        await asyncio.sleep(1)
-        answer = await channel.fetch_message(answer.id)
+                if "DexKit" in crypto.name:
+                    content = f"$tip <@590827947976425473> all {crypto.name.replace('*', '').replace('DexKit (BSC)', 'bKIT')}"
+                    async with channel.typing():
+                        await asyncio.sleep(len(content) / 600 * 60)
+                    await channel.send(content)
+                else:
+                    content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '')}"
+                    async with channel.typing():
+                        await asyncio.sleep(len(content) / 600 * 60)
+                    await channel.send(content)
+        if button_disabled:
+            try:
+                await answer.components[0].children[2].click()
+                return
+            except IndexError:
+                await answer.components[0].children[0].click()
+                return
+        else:
+            await button.click()
+            await asyncio.sleep(1)
+            answer = await channel.fetch_message(answer.id)
 
 @tipping.before_loop
 async def before_tipping():

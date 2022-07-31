@@ -75,14 +75,14 @@ async def tipping():
                 pass
             else:
                 if "DexKit" in crypto.name:
-                    content = f"$tip <@590827947976425473> all {crypto.name.replace('*', '').replace('DexKit (BSC)', 'bKIT')}"
+                    content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '').replace('DexKit (BSC)', 'bKIT')}"
                     async with channel.typing():
-                        await asyncio.sleep(len(content) / 600 * 60)
+                        await asyncio.sleep(len(content) / config["CPM"] * 60)
                     await channel.send(content)
                 else:
                     content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '')}"
                     async with channel.typing():
-                        await asyncio.sleep(len(content) / 600 * 60)
+                        await asyncio.sleep(len(content) / config["CPM"] * 60)
                     await channel.send(content)
         if button_disabled:
             try:

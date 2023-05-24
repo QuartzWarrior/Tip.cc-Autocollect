@@ -1,11 +1,17 @@
-import asyncio
-import json
-import random
+from asyncio import sleep
+try:
+    from orjson import load, dump
+except ModuleNotFoundError:
+    try:
+        from ujson import load, dump
+    except ModuleNotFoundError:
+        from json import load, dump
+#import random
 
 #from aiohttp_socks import ProxyType, ProxyConnector, ChainProxyConnector
-import aiohttp
-import art
-import discord
+#import aiohttp
+from art import tprint
+from discord import Client, LoginFailure, HTTPException, NotFound
 from discord.ext import tasks
 
 channel = None
@@ -13,34 +19,34 @@ channel = None
 proxies = ["syd","tor","par","fra","lin","nrt","ams","waw","lis","sin","mad","sto","lon","iad","atl","chi","dal","den","lax","mia","nyc","sea","phx"]
 
 print("\033[0;35m")
-art.tprint('QuartzWarrior', font="smslant")
+tprint('QuartzWarrior', font="smslant")
 
 with open("config.json", 'r') as f:
-    config = json.load(f)
+    config = load(f)
 
-client = discord.Client()
+client = Client()
 
 if config["TOKEN"] == "":
     config["TOKEN"] = input("What is your discord token?\n\n-> ")
     with open("config.json", 'w') as f:
-        json.dump(config, f)
+        dump(config, f)
 
 if config["FIRST"] == "True":
     config["CPM"] = int(input("What is your CPM (Characters Per Minute)?\nThis is to make the phrase drop collector "
                               "more legit.\nA decent CPM would be 310. Remember, the higher the faster!\n\n-> "))
     config["FIRST"] = "False"
     with open("config.json", 'w') as f:
-        json.dump(config, f)
+        dump(config, f)
         
 if config["id"] == 0:
     config["id"] = int(input("What is your main accounts id?\n\nIf you are sniping from your main, put your main accounts' id.\n\n-> "))
     with open("config.json", 'w') as f:
-        json.dump(config, f)
+        dump(config, f)
         
 if config["channel_id"] == 0:
     config["channel_id"] = int(input("What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.\n\n-> "))
     with open("config.json", 'w') as f:
-        json.dump(config, f)
+        dump(config, f)
 
 
 @client.event
@@ -77,12 +83,12 @@ async def tipping():
                 if "DexKit" in crypto.name:
                     content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '').replace('DexKit (BSC)', 'bKIT')}"
                     async with channel.typing():
-                        await asyncio.sleep(len(content) / config["CPM"] * 60)
+                        await sleep(len(content) / config["CPM"] * 60)
                     await channel.send(content)
                 else:
                     content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '')}"
                     async with channel.typing():
-                        await asyncio.sleep(len(content) / config["CPM"] * 60)
+                        await sleep(len(content) / config["CPM"] * 60)
                     await channel.send(content)
         if button_disabled:
             try:
@@ -93,7 +99,7 @@ async def tipping():
                 return
         else:
             await button.click()
-            await asyncio.sleep(1)
+            await sleep(1)
             answer = await channel.fetch_message(answer.id)
 
 @tipping.before_loop
@@ -126,7 +132,7 @@ async def on_message(message):
                     else:
                         length = len(content) / config["CPM"] * 60
                         async with message.channel.typing():
-                            await asyncio.sleep(length)
+                            await sleep(length)
                         await message.channel.send(content)
                         print(f"Entered phrasedrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}")
                 elif "appeared" in embed.title:
@@ -138,15 +144,15 @@ async def on_message(message):
                         print(f"Claimed envelope for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}")
             except AttributeError:
                 pass
-            except discord.HTTPException:
+            except HTTPException:
                 return
-            except discord.NotFound:
+            except NotFound:
                 return
 
 try:
     client.run(config["TOKEN"])
-except discord.LoginFailure:
+except LoginFailure:
     print("Invalid token, restart the program.")
     config["TOKEN"] = ""
     with open("config.json", 'w') as f:
-        json.dump(config, f)
+        dump(config, f)

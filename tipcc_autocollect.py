@@ -1,47 +1,16 @@
 from asyncio import sleep
+from art import tprint
+from discord import Client, LoginFailure, HTTPException, NotFound, Message
+from discord.ext import tasks
 
 try:
-    from orjson import load, dump
+    from ujson import load, dump
 except ModuleNotFoundError:
-    try:
-        from ujson import load, dump
-    except ModuleNotFoundError:
-        from json import load, dump
-# import random
+    from json import load, dump
 
-# from aiohttp_socks import ProxyType, ProxyConnector, ChainProxyConnector
-# import aiohttp
-from art import tprint
-from discord import Client, LoginFailure, HTTPException, NotFound
-from discord.ext import tasks
 
 channel = None
 
-proxies = [
-    "syd",
-    "tor",
-    "par",
-    "fra",
-    "lin",
-    "nrt",
-    "ams",
-    "waw",
-    "lis",
-    "sin",
-    "mad",
-    "sto",
-    "lon",
-    "iad",
-    "atl",
-    "chi",
-    "dal",
-    "den",
-    "lax",
-    "mia",
-    "nyc",
-    "sea",
-    "phx",
-]
 
 print("\033[0;35m")
 tprint("QuartzWarrior", font="smslant")
@@ -110,8 +79,9 @@ async def tipping():
         pages = int(answer.embeds[0].author.name.split("/")[1].replace(")", ""))
     except:
         pages = 1
-    page = 1
-    for page in range(pages):
+    if not answer.components:
+        button_disabled = True
+    for _ in range(pages):
         try:
             button = answer.components[0].children[1]
             if button.disabled:
@@ -141,8 +111,11 @@ async def tipping():
                 await answer.components[0].children[2].click()
                 return
             except IndexError:
-                await answer.components[0].children[0].click()
-                return
+                try:
+                    await answer.components[0].children[0].click()
+                    return
+                except IndexError:
+                    return
         else:
             await button.click()
             await sleep(1)
@@ -156,7 +129,7 @@ async def before_tipping():
 
 
 @client.event
-async def on_message(original_message):
+async def on_message(original_message: Message):
     if original_message.content.startswith(
         ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
     ) and not any(word in original_message.content.lower() for word in banned_words):
@@ -164,7 +137,7 @@ async def on_message(original_message):
             "message",
             check=lambda message: message.author.id == 617037497574359050
             and message.embeds
-            and original_message.author.id in message.embeds[0].description,
+            and str(original_message.author.id) in message.embeds[0].description,
         )
         embed = tip_cc_message.embeds[0]
         try:

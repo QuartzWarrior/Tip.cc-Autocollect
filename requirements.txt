@@ -1,5 +1,4 @@
 git+https://github.com/dolfies/discord.py-self.git
 art
 aiohttp[speedups]
-orjson; python_implementation == 'CPython'
-ujson; python_implementation != 'CPython'
+ujson

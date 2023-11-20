@@ -1,7 +1,47 @@
-from asyncio import sleep
+from asyncio import sleep, TimeoutError
+from aiohttp import ClientSession
+from urllib.parse import quote, unquote
 from art import tprint
 from discord import Client, LoginFailure, HTTPException, NotFound, Message
 from discord.ext import tasks
+from math import (
+    sqrt,
+    floor,
+    ceil,
+    fabs as abs,
+    sin,
+    cos,
+    tan,
+    pow,
+    exp,
+    log,
+    log1p,
+    log2,
+    log10,
+    cosh,
+    sinh,
+    pi,
+    tau,
+    e,
+    factorial,
+    gcd,
+    gamma,
+    fmod as mod,
+    hypot,
+    acosh,
+    asinh,
+    atanh,
+    erf,
+)
+
+
+def round(x):
+    return int(x // 1 + 0.5)
+
+
+def cbrt(x):
+    return pow(x, 1 / 3)
+
 
 try:
     from ujson import load, dump
@@ -133,12 +173,16 @@ async def on_message(original_message: Message):
     if original_message.content.startswith(
         ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
     ) and not any(word in original_message.content.lower() for word in banned_words):
-        tip_cc_message = await client.wait_for(
-            "message",
-            check=lambda message: message.author.id == 617037497574359050
-            and message.embeds
-            and str(original_message.author.id) in message.embeds[0].description,
-        )
+        try:
+            tip_cc_message = await client.wait_for(
+                "message",
+                check=lambda message: message.author.id == 617037497574359050
+                and message.embeds
+                and str(original_message.author.id) in message.embeds[0].description,
+                timeout=15,
+            )
+        except TimeoutError:
+            return
         embed = tip_cc_message.embeds[0]
         try:
             if (
@@ -147,9 +191,7 @@ async def on_message(original_message: Message):
             ):
                 return
             elif "An airdrop appears" in embed.title:
-                comp = tip_cc_message.components
-                comp = comp[0].children
-                button = comp[0]
+                button = tip_cc_message.components[0].children[0]
                 if "Enter airdrop" in button.label:
                     await button.click()
                     print(
@@ -159,7 +201,7 @@ async def on_message(original_message: Message):
                 content = embed.description.replace("\n", "").replace("**", "")
                 content = content.split("*")
                 try:
-                    content = content[1].replace("​", "").replace("\u200b", "")
+                    content = content[1].replace("​", "").replace("\u200b", "").strip()
                 except IndexError:
                     pass
                 else:
@@ -171,20 +213,59 @@ async def on_message(original_message: Message):
                         f"Entered phrasedrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "appeared" in embed.title:
-                comp = tip_cc_message.components
-                comp = comp[0].children
-                button = comp[0]
+                button = tip_cc_message.components[0].children[0]
                 if "envelope" in button.label:
                     await button.click()
                     print(
                         f"Claimed envelope for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
+            elif "Math" in embed.title:
+                content = embed.description.replace("\n", "").replace("**", "")
+                content = content.split("`")
+                try:
+                    content = content[1].replace("​", "").replace("\u200b", "")
+                except IndexError:
+                    pass
+                else:
+                    answer = eval(content)
+                    length = len(str(answer)) / config["CPM"] * 60
+                    async with original_message.channel.typing():
+                        await sleep(length)
+                    await original_message.channel.send(answer)
+                    print(
+                        f"Entered mathdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                    )
+            elif "Trivia time - " in embed.title:
+                category = embed.title.split("Trivia time - ")[1].strip()
+                bot_question = embed.description.replace("**", "").split("*")[1]
+                async with ClientSession() as session:
+                    async with session.get(
+                        f"https://quartzwarrior.xyz/bots/tipcc_autocollect/{quote(category)}.csv"
+                    ) as resp:
+                        lines = (await resp.text()).splitlines()
+                        for line in lines:
+                            question, answer = line.split(",")
+                            if bot_question.strip() == unquote(question).strip():
+                                answer = unquote(answer).strip()
+                                buttons = tip_cc_message.components[0].children
+                                for button in buttons:
+                                    if button.label.strip() == answer:
+                                        await button.click()
+                                print(
+                                    f"Entered triviadrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                                )
+                                return
+
         except AttributeError:
             return
         except HTTPException:
             return
         except NotFound:
             return
+    elif original_message.content.startswith(
+        ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
+    ) and any(word in original_message.content.lower() for word in banned_words):
+        print("Banned word detected, skipping...")
 
 
 try:

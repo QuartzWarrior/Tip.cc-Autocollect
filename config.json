@@ -1,1 +1,16 @@
-{"TOKEN": "", "CPM": 310, "FIRST": "True", "id": 0, "channel_id": 0, "BANNED_WORDS": ["bot", "ban"]}
+{
+    "TOKEN": "",
+    "CPM": 310,
+    "FIRST": "True",
+    "id": 0,
+    "channel_id": 0,
+    "BANNED_WORDS": [
+        "bot",
+        "ban"
+    ],
+    "DISABLE_AIRDROP": false,
+    "DISABLE_TRIVIADROP": false,
+    "DISABLE_MATHDROP": false,
+    "DISABLE_PHRASEDROP": false,
+    "DISABLE_REDPACKET": false
+}

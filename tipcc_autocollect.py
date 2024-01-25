@@ -73,6 +73,24 @@ if config["FIRST"] == "True":
         )
     )
     config["FIRST"] = "False"
+    input("Want to disable any drop types? (Press enter to continue)\n\n-> ")
+    print(
+        "Drop types:\n\n$airdrop\n$triviadrop\n$mathdrop\n$phrasedrop\n$redpacket\n\n"
+    )
+    disable_drops = input(
+        "What drop types do you want to disable? (Separate with spaces)\n\n-> "
+    ).split(" ")
+    for drop in disable_drops:
+        if "airdrop" in drop.lower():
+            config["DISABLE_AIRDROP"] = True
+        if "triviadrop" in drop.lower():
+            config["DISABLE_TRIVIADROP"] = True
+        elif "mathdrop" in drop.lower():
+            config["DISABLE_MATHDROP"] = True
+        elif "phrasedrop" in drop.lower():
+            config["DISABLE_PHRASEDROP"] = True
+        elif "redpacket" in drop.lower():
+            config["DISABLE_REDPACKET"] = True
     with open("config.json", "w") as f:
         dump(config, f)
 
@@ -94,7 +112,14 @@ if config["channel_id"] == 0:
     with open("config.json", "w") as f:
         dump(config, f)
 
+config["DISABLE_AIRDROP"] = config.get("DISABLE_AIRDROP", False)
+config["DISABLE_TRIVIADROP"] = config.get("DISABLE_TRIVIADROP", False)
+config["DISABLE_MATHDROP"] = config.get("DISABLE_MATHDROP", False)
+config["DISABLE_PHRASEDROP"] = config.get("DISABLE_PHRASEDROP", False)
+config["DISABLE_REDPACKET"] = config.get("DISABLE_REDPACKET", False)
+
 banned_words = config["BANNED_WORDS"]
+banned_words = set(banned_words)
 
 
 @client.event
@@ -177,7 +202,9 @@ async def on_message(original_message: Message):
             tip_cc_message = await client.wait_for(
                 "message",
                 check=lambda message: message.author.id == 617037497574359050
+                and message.channel.id == original_message.channel.id
                 and message.embeds
+                and "Ends" in message.embeds[0].footer.text.lower()
                 and str(original_message.author.id) in message.embeds[0].description,
                 timeout=15,
             )
@@ -190,14 +217,14 @@ async def on_message(original_message: Message):
                 and "Trivia time - " not in embed.title
             ):
                 return
-            elif "An airdrop appears" in embed.title:
+            elif "An airdrop appears" in embed.title and not config["DISABLE_AIRDROP"]:
                 button = tip_cc_message.components[0].children[0]
                 if "Enter airdrop" in button.label:
                     await button.click()
                     print(
                         f"Entered airdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
-            elif "Phrase drop!" in embed.title:
+            elif "Phrase drop!" in embed.title and not config["DISABLE_PHRASEDROP"]:
                 content = embed.description.replace("\n", "").replace("**", "")
                 content = content.split("*")
                 try:
@@ -212,14 +239,14 @@ async def on_message(original_message: Message):
                     print(
                         f"Entered phrasedrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
-            elif "appeared" in embed.title:
+            elif "appeared" in embed.title and not config["DISABLE_REDPACKET"]:
                 button = tip_cc_message.components[0].children[0]
                 if "envelope" in button.label:
                     await button.click()
                     print(
                         f"Claimed envelope for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
-            elif "Math" in embed.title:
+            elif "Math" in embed.title and not config["DISABLE_MATHDROP"]:
                 content = embed.description.replace("\n", "").replace("**", "")
                 content = content.split("`")
                 try:
@@ -235,7 +262,7 @@ async def on_message(original_message: Message):
                     print(
                         f"Entered mathdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
-            elif "Trivia time - " in embed.title:
+            elif "Trivia time - " in embed.title and not config["DISABLE_TRIVIADROP"]:
                 category = embed.title.split("Trivia time - ")[1].strip()
                 bot_question = embed.description.replace("**", "").split("*")[1]
                 async with ClientSession() as session:
@@ -268,10 +295,11 @@ async def on_message(original_message: Message):
         print("Banned word detected, skipping...")
 
 
-try:
-    client.run(config["TOKEN"])
-except LoginFailure:
-    print("Invalid token, restart the program.")
-    config["TOKEN"] = ""
-    with open("config.json", "w") as f:
-        dump(config, f)
+if __name__ == "__main__":
+    try:
+        client.run(config["TOKEN"])
+    except LoginFailure:
+        print("Invalid token, restart the program.")
+        config["TOKEN"] = ""
+        with open("config.json", "w") as f:
+            dump(config, f)

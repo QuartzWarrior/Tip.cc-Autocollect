@@ -1,13 +1,16 @@
 {
     "TOKEN": "",
     "CPM": 310,
-    "FIRST": "True",
+    "FIRST": true,
     "id": 0,
     "channel_id": 0,
+    "SMART_DELAY": true,
+    "MANUAL_DELAY": 1,
     "BANNED_WORDS": [
         "bot",
         "ban"
     ],
+    "IGNORE_DROPS_UNDER": 0.0,
     "DISABLE_AIRDROP": false,
     "DISABLE_TRIVIADROP": false,
     "DISABLE_MATHDROP": false,

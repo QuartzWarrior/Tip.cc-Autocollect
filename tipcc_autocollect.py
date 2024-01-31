@@ -1,9 +1,12 @@
 from asyncio import sleep, TimeoutError
+from re import compile
 from aiohttp import ClientSession
 from urllib.parse import quote, unquote
 from art import tprint
+from time import time
 from discord import Client, LoginFailure, HTTPException, NotFound, Message
 from discord.ext import tasks
+from questionary import text, select, checkbox
 from math import (
     sqrt,
     floor,
@@ -35,10 +38,6 @@ from math import (
 )
 
 
-def round(x):
-    return int(x // 1 + 0.5)
-
-
 def cbrt(x):
     return pow(x, 1 / 3)
 
@@ -46,6 +45,8 @@ def cbrt(x):
 try:
     from ujson import load, dump
 except ModuleNotFoundError:
+    from json import load, dump
+except ImportError:
     from json import load, dump
 
 
@@ -55,62 +56,142 @@ channel = None
 print("\033[0;35m")
 tprint("QuartzWarrior", font="smslant")
 
-with open("config.json", "r") as f:
-    config = load(f)
+try:
+    with open("config.json", "r") as f:
+        config = load(f)
+except FileNotFoundError:
+    config = {
+        "TOKEN": "",
+        "CPM": 310,
+        "DELAY": 0,
+        "SMART_DELAY": True,
+        "IGNORE_DROPS_UNDER": 0.0,
+        "DISABLE_AIRDROP": False,
+        "DISABLE_TRIVIADROP": False,
+        "DISABLE_MATHDROP": False,
+        "DISABLE_PHRASEDROP": False,
+        "DISABLE_REDPACKET": False,
+        "BANNED_WORDS": ["bot", "ban"],
+        "FIRST": True,
+        "id": 0,
+        "channel_id": 0,
+    }
+    with open("config.json", "w") as f:
+        dump(config, f, indent=4)
 
-client = Client()
+token_regex = compile(r"[\w-]{24}\.[\w-]{6}\.[\w-]{27,}")
+
+
+def validate_token(token):
+    if token_regex.search(token):
+        return True
+    else:
+        return False
+
 
 if config["TOKEN"] == "":
-    config["TOKEN"] = input("What is your discord token?\n\n-> ")
-    with open("config.json", "w") as f:
-        dump(config, f)
+    token_input = text(
+        "What is your discord token?",
+        qmark="->",
+        validate=lambda x: validate_token(x),
+    ).ask()
+    if token_input is not None:
+        config["TOKEN"] = token_input
+        with open("config.json", "w") as f:
+            dump(config, f, indent=4)
 
-if config["FIRST"] == "True":
+if config["FIRST"] == True:
     config["CPM"] = int(
-        input(
-            "What is your CPM (Characters Per Minute)?\nThis is to make the phrase drop collector "
-            "more legit.\nA decent CPM would be 310. Remember, the higher the faster!\n\n-> "
-        )
+        text(
+            "What is your CPM (Characters Per Minute)?\nThis is to make the phrase drop collector more legit.\nRemember, the higher the faster!",
+            default="310",
+            qmark="->",
+            validate=lambda x: x.isnumeric() and int(x) >= 0,
+        ).ask()
     )
-    config["FIRST"] = "False"
-    input("Want to disable any drop types? (Press enter to continue)\n\n-> ")
-    print(
-        "Drop types:\n\n$airdrop\n$triviadrop\n$mathdrop\n$phrasedrop\n$redpacket\n\n"
-    )
-    disable_drops = input(
-        "What drop types do you want to disable? (Separate with spaces)\n\n-> "
-    ).split(" ")
-    for drop in disable_drops:
-        if "airdrop" in drop.lower():
-            config["DISABLE_AIRDROP"] = True
-        if "triviadrop" in drop.lower():
-            config["DISABLE_TRIVIADROP"] = True
-        elif "mathdrop" in drop.lower():
-            config["DISABLE_MATHDROP"] = True
-        elif "phrasedrop" in drop.lower():
-            config["DISABLE_PHRASEDROP"] = True
-        elif "redpacket" in drop.lower():
-            config["DISABLE_REDPACKET"] = True
+    config["FIRST"] = False
+    config["DISABLE_AIRDROP"] = False
+    config["DISABLE_TRIVIADROP"] = False
+    config["DISABLE_MATHDROP"] = False
+    config["DISABLE_PHRASEDROP"] = False
+    config["DISABLE_REDPACKET"] = False
+    disable_drops = checkbox(
+        "What drop types do you want to disable? (Leave blank for none)",
+        choices=[
+            "airdrop",
+            "triviadrop",
+            "mathdrop",
+            "phrasedrop",
+            "redpacket",
+        ],
+        qmark="->",
+    ).ask()
+    if not disable_drops:
+        disable_drops = []
+    if "airdrop" in disable_drops:
+        config["DISABLE_AIRDROP"] = True
+    if "triviadrop" in disable_drops:
+        config["DISABLE_TRIVIADROP"] = True
+    if "mathdrop" in disable_drops:
+        config["DISABLE_MATHDROP"] = True
+    if "phrasedrop" in disable_drops:
+        config["DISABLE_PHRASEDROP"] = True
+    if "redpacket" in disable_drops:
+        config["DISABLE_REDPACKET"] = True
+    ignore_drops_under = text(
+        "What is the minimum amount of money you want to ignore?",
+        default="0",
+        qmark="->",
+        validate=lambda x: (x.isnumeric() and int(x) >= 0) or x == "",
+    ).ask()
+    if ignore_drops_under != "":
+        config["IGNORE_DROPS_UNDER"] = float(ignore_drops_under)
+    else:
+        config["IGNORE_DROPS_UNDER"] = 0.0
+    smart_delay = select(
+        "Do you want to enable smart delay? (This will make the bot wait for the drop to end before claiming it)",
+        choices=["yes", "no"],
+        qmark="->",
+    ).ask()
+    if smart_delay == "yes":
+        config["SMART_DELAY"] = True
+    else:
+        config["SMART_DELAY"] = False
+        manual_delay = text(
+            "What is the delay you want to use in seconds? (Leave blank for none)",
+            validate=lambda x: x.isnumeric() or x == "",
+            default="0",
+            qmark="->",
+        ).ask()
+        if manual_delay != "":
+            config["DELAY"] = float(manual_delay)
+        else:
+            config["DELAY"] = 0
     with open("config.json", "w") as f:
-        dump(config, f)
+        dump(config, f, indent=4)
 
 if config["id"] == 0:
     config["id"] = int(
-        input(
-            "What is your main accounts id?\n\nIf you are sniping from your main, put your main accounts' id.\n\n-> "
-        )
+        text(
+            "What is your main accounts id?\n\nIf you are sniping from your main, put your main accounts' id.",
+            validate=lambda x: x.isnumeric() and 17 <= len(x) <= 19,
+            qmark="->",
+        ).ask()
     )
     with open("config.json", "w") as f:
-        dump(config, f)
+        dump(config, f, indent=4)
 
 if config["channel_id"] == 0:
     config["channel_id"] = int(
-        input(
-            "What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.\n\n-> "
-        )
+        text(
+            "What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.",
+            validate=lambda x: x.isnumeric() and 17 <= len(x) <= 19,
+            default="1",
+            qmark="->",
+        ).ask()
     )
     with open("config.json", "w") as f:
-        dump(config, f)
+        dump(config, f, indent=4)
 
 config["DISABLE_AIRDROP"] = config.get("DISABLE_AIRDROP", False)
 config["DISABLE_TRIVIADROP"] = config.get("DISABLE_TRIVIADROP", False)
@@ -118,8 +199,9 @@ config["DISABLE_MATHDROP"] = config.get("DISABLE_MATHDROP", False)
 config["DISABLE_PHRASEDROP"] = config.get("DISABLE_PHRASEDROP", False)
 config["DISABLE_REDPACKET"] = config.get("DISABLE_REDPACKET", False)
 
-banned_words = config["BANNED_WORDS"]
-banned_words = set(banned_words)
+banned_words = set(config["BANNED_WORDS"])
+
+client = Client()
 
 
 @client.event
@@ -129,7 +211,8 @@ async def on_ready():
     print(
         f"Logged in as {client.user.name}#{client.user.discriminator} ({client.user.id})"
     )
-    tipping.start()
+    if config["channel_id"] != 1:
+        tipping.start()
 
 
 @tasks.loop(minutes=10.0)
@@ -149,28 +232,19 @@ async def tipping():
     for _ in range(pages):
         try:
             button = answer.components[0].children[1]
-            if button.disabled:
-                button_disabled = True
-            else:
-                button_disabled = False
+            button_disabled = button.disabled
         except:
             button_disabled = True
         for crypto in answer.embeds[0].fields:
             if "Estimated total" in crypto.name:
-                pass
+                continue
+            if "DexKit" in crypto.name:
+                content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '').replace('DexKit (BSC)', 'bKIT')}"
             else:
-                if "DexKit" in crypto.name:
-                    content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '').replace('DexKit (BSC)', 'bKIT')}"
-                    async with channel.typing():
-                        await sleep(len(content) / config["CPM"] * 60)
-                    await channel.send(content)
-                else:
-                    content = (
-                        f"$tip <@{config['id']}> all {crypto.name.replace('*', '')}"
-                    )
-                    async with channel.typing():
-                        await sleep(len(content) / config["CPM"] * 60)
-                    await channel.send(content)
+                content = f"$tip <@{config['id']}> all {crypto.name.replace('*', '')}"
+            async with channel.typing():
+                await sleep(len(content) / config["CPM"] * 60)
+            await channel.send(content)
         if button_disabled:
             try:
                 await answer.components[0].children[2].click()
@@ -204,13 +278,35 @@ async def on_message(original_message: Message):
                 check=lambda message: message.author.id == 617037497574359050
                 and message.channel.id == original_message.channel.id
                 and message.embeds
-                and "Ends" in message.embeds[0].footer.text.lower()
+                and "ends" in message.embeds[0].footer.text.lower()
                 and str(original_message.author.id) in message.embeds[0].description,
                 timeout=15,
             )
         except TimeoutError:
             return
         embed = tip_cc_message.embeds[0]
+        money = float(
+            embed.description.split("≈")[1]
+            .split(")")[0]
+            .strip()
+            .replace("$", "")
+            .replace(",", "")
+        )
+        if money < config["IGNORE_DROPS_UNDER"]:
+            print(
+                f"Ignored drop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+            )
+            return
+        if config["SMART_DELAY"]:
+            drop_ends_in = embed.timestamp.timestamp() - time()
+            if drop_ends_in < 0:
+                return
+            delay = drop_ends_in / 4
+            await sleep(delay)
+            print(f"Waited {round(delay, 2)} seconds before claiming.")
+        elif config["DELAY"] != 0:
+            await sleep(config["DELAY"])
+            print(f"Waited {config['DELAY']} seconds before claiming.")
         try:
             if (
                 "ended" in embed.footer.text.lower()
@@ -302,4 +398,4 @@ if __name__ == "__main__":
         print("Invalid token, restart the program.")
         config["TOKEN"] = ""
         with open("config.json", "w") as f:
-            dump(config, f)
+            dump(config, f, indent=4)

@@ -80,10 +80,18 @@ except FileNotFoundError:
         dump(config, f, indent=4)
 
 token_regex = compile(r"[\w-]{24}\.[\w-]{6}\.[\w-]{27,}")
+decimal_regex = compile(r"^-?\d+(?:\.\d+)$")
 
 
 def validate_token(token):
     if token_regex.search(token):
+        return True
+    else:
+        return False
+
+
+def validate_decimal(decimal):
+    if decimal_regex.match(decimal):
         return True
     else:
         return False
@@ -106,7 +114,7 @@ if config["FIRST"] == True:
             "What is your CPM (Characters Per Minute)?\nThis is to make the phrase drop collector more legit.\nRemember, the higher the faster!",
             default="310",
             qmark="->",
-            validate=lambda x: x.isnumeric() and int(x) >= 0,
+            validate=lambda x: (validate_decimal(x) or x.isnumeric()) and float(x) >= 0,
         ).ask()
     )
     config["FIRST"] = False
@@ -142,7 +150,8 @@ if config["FIRST"] == True:
         "What is the minimum amount of money you want to ignore?",
         default="0",
         qmark="->",
-        validate=lambda x: (x.isnumeric() and int(x) >= 0) or x == "",
+        validate=lambda x: ((validate_decimal(x) or x.isnumeric()) and float(x) >= 0)
+        or x == "",
     ).ask()
     if ignore_drops_under != "":
         config["IGNORE_DROPS_UNDER"] = float(ignore_drops_under)
@@ -159,7 +168,7 @@ if config["FIRST"] == True:
         config["SMART_DELAY"] = False
         manual_delay = text(
             "What is the delay you want to use in seconds? (Leave blank for none)",
-            validate=lambda x: x.isnumeric() or x == "",
+            validate=lambda x: (validate_decimal(x) or x.isnumeric()) or x == "",
             default="0",
             qmark="->",
         ).ask()
@@ -278,7 +287,14 @@ async def on_message(original_message: Message):
                 check=lambda message: message.author.id == 617037497574359050
                 and message.channel.id == original_message.channel.id
                 and message.embeds
-                and "ends" in message.embeds[0].footer.text.lower()
+                and message.embeds[0].footer
+                and (
+                    "ends" in message.embeds[0].footer.text.lower()
+                    or (
+                        "Trivia time - " in message.embeds[0].title
+                        and "ended" in message.embeds[0].footer.text.lower()
+                    )
+                )
                 and str(original_message.author.id) in message.embeds[0].description,
                 timeout=15,
             )

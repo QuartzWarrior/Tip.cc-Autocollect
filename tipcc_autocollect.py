@@ -1,41 +1,65 @@
-from asyncio import sleep, TimeoutError
+from asyncio import TimeoutError, sleep
+from logging import (CRITICAL, DEBUG, ERROR, INFO, WARNING, Formatter,
+                     StreamHandler, getLogger)
+from math import acosh, asinh, atanh, ceil, cos, cosh, e, erf, exp
+from math import fabs as abs
+from math import factorial, floor
+from math import fmod as mod
+from math import (gamma, gcd, hypot, log, log1p, log2, log10, pi, pow, sin,
+                  sinh, sqrt, tan, tau)
 from re import compile
-from aiohttp import ClientSession
-from urllib.parse import quote, unquote
-from art import tprint
 from time import time
-from discord import Client, LoginFailure, HTTPException, NotFound, Message
+from urllib.parse import quote, unquote
+
+from aiohttp import ClientSession
+from art import tprint
+from discord import Client, HTTPException, LoginFailure, Message, NotFound
 from discord.ext import tasks
-from questionary import text, select, checkbox
-from math import (
-    sqrt,
-    floor,
-    ceil,
-    fabs as abs,
-    sin,
-    cos,
-    tan,
-    pow,
-    exp,
-    log,
-    log1p,
-    log2,
-    log10,
-    cosh,
-    sinh,
-    pi,
-    tau,
-    e,
-    factorial,
-    gcd,
-    gamma,
-    fmod as mod,
-    hypot,
-    acosh,
-    asinh,
-    atanh,
-    erf,
-)
+from questionary import checkbox, select, text
+
+
+class ColourFormatter(
+    Formatter
+):  # Taken from discord.py-self and modified to my liking.
+
+    LEVEL_COLOURS = [
+        (DEBUG, "\x1b[40;1m"),
+        (INFO, "\x1b[34;1m"),
+        (WARNING, "\x1b[33;1m"),
+        (ERROR, "\x1b[31m"),
+        (CRITICAL, "\x1b[41m"),
+    ]
+
+    FORMATS = {
+        level: Formatter(
+            f"\x1b[30;1m%(asctime)s\x1b[0m {colour}%(levelname)-8s\x1b[0m \x1b[35m%(name)s\x1b[0m %(message)s \x1b[30;1m(%(filename)s:%(lineno)d)\x1b[0m",
+            "%d-%b-%Y %I:%M:%S %p",
+        )
+        for level, colour in LEVEL_COLOURS
+    }
+
+    def format(self, record):
+        formatter = self.FORMATS.get(record.levelno)
+        if formatter is None:
+            formatter = self.FORMATS[DEBUG]
+
+        if record.exc_info:
+            text = formatter.formatException(record.exc_info)
+            record.exc_text = f"\x1b[31m{text}\x1b[0m"
+
+        output = formatter.format(record)
+
+        record.exc_text = None
+        return output
+
+
+handler = StreamHandler()
+formatter = ColourFormatter()
+
+handler.setFormatter(formatter)
+logger = getLogger("tipcc_autocollect")
+logger.addHandler(handler)
+logger.setLevel("INFO")
 
 
 def cbrt(x):
@@ -43,11 +67,15 @@ def cbrt(x):
 
 
 try:
-    from ujson import load, dump
+    from ujson import dump, load
 except ModuleNotFoundError:
-    from json import load, dump
+    logger.warning("ujson not found, using json instead.")
+    from json import dump, load
 except ImportError:
-    from json import load, dump
+    logger.warning("ujson not found, using json instead.")
+    from json import dump, load
+else:
+    logger.info("ujson found, using ujson.")
 
 
 channel = None
@@ -55,6 +83,7 @@ channel = None
 
 print("\033[0;35m")
 tprint("QuartzWarrior", font="smslant")
+print("\033[0m")
 
 try:
     with open("config.json", "r") as f:
@@ -107,6 +136,7 @@ if config["TOKEN"] == "":
         config["TOKEN"] = token_input
         with open("config.json", "w") as f:
             dump(config, f, indent=4)
+        logger.debug("Token saved.")
 
 if config["FIRST"] == True:
     config["CPM"] = int(
@@ -178,6 +208,7 @@ if config["FIRST"] == True:
             config["DELAY"] = 0
     with open("config.json", "w") as f:
         dump(config, f, indent=4)
+    logger.debug("Config saved.")
 
 if config["id"] == 0:
     config["id"] = int(
@@ -189,18 +220,20 @@ if config["id"] == 0:
     )
     with open("config.json", "w") as f:
         dump(config, f, indent=4)
+    logger.debug("ID saved.")
 
 if config["channel_id"] == 0:
     config["channel_id"] = int(
         text(
             "What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.",
-            validate=lambda x: x.isnumeric() and 17 <= len(x) <= 19,
+            validate=lambda x: x.isnumeric() and (17 <= len(x) <= 19 or int(x) == 1),
             default="1",
             qmark="->",
         ).ask()
     )
     with open("config.json", "w") as f:
         dump(config, f, indent=4)
+    logger.debug("Channel ID saved.")
 
 config["DISABLE_AIRDROP"] = config.get("DISABLE_AIRDROP", False)
 config["DISABLE_TRIVIADROP"] = config.get("DISABLE_TRIVIADROP", False)
@@ -217,16 +250,18 @@ client = Client()
 async def on_ready():
     global channel
     channel = client.get_channel(config["channel_id"])
-    print(
-        f"Logged in as {client.user.name}#{client.user.discriminator} ({client.user.id})"
-    )
-    if config["channel_id"] != 1:
+    logger.info(f"Logged in as {client.user.name}#{client.user.discriminator}")
+    if config["channel_id"] != 1 and client.user.id != config["id"]:
         tipping.start()
+        logger.info("Tipping started.")
+    else:
+        logger.warning("Disabling tipping as requested.")
 
 
 @tasks.loop(minutes=10.0)
 async def tipping():
     await channel.send("$bals top")
+    logger.debug("Sent command: $bals top")
     answer = await client.wait_for(
         "message",
         check=lambda message: message.author.id == 617037497574359050
@@ -254,13 +289,16 @@ async def tipping():
             async with channel.typing():
                 await sleep(len(content) / config["CPM"] * 60)
             await channel.send(content)
+            logger.debug(f"Sent tip: {content}")
         if button_disabled:
             try:
                 await answer.components[0].children[2].click()
+                logger.debug("Clicked next page button")
                 return
             except IndexError:
                 try:
                     await answer.components[0].children[0].click()
+                    logger.debug("Clicked first page button")
                     return
                 except IndexError:
                     return
@@ -272,7 +310,7 @@ async def tipping():
 
 @tipping.before_loop
 async def before_tipping():
-    print("Waiting for bot to be ready before tipping starts...")
+    logger.info("Waiting for bot to be ready before tipping starts...")
     await client.wait_until_ready()
 
 
@@ -281,6 +319,7 @@ async def on_message(original_message: Message):
     if original_message.content.startswith(
         ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
     ) and not any(word in original_message.content.lower() for word in banned_words):
+        logger.debug(f"Detected drop: {original_message.content}")
         try:
             tip_cc_message = await client.wait_for(
                 "message",
@@ -298,7 +337,11 @@ async def on_message(original_message: Message):
                 and str(original_message.author.id) in message.embeds[0].description,
                 timeout=15,
             )
+            logger.debug("Detected tip.cc message from drop.")
         except TimeoutError:
+            logger.exception(
+                "Timeout occurred while waiting for tip.cc message, skipping."
+            )
             return
         embed = tip_cc_message.embeds[0]
         money = float(
@@ -309,72 +352,86 @@ async def on_message(original_message: Message):
             .replace(",", "")
         )
         if money < config["IGNORE_DROPS_UNDER"]:
-            print(
+            logger.info(
                 f"Ignored drop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
             )
             return
         if config["SMART_DELAY"]:
+            logger.debug("Smart delay enabled, waiting...")
             drop_ends_in = embed.timestamp.timestamp() - time()
             if drop_ends_in < 0:
+                logger.debug("Drop ended, skipping...")
                 return
             delay = drop_ends_in / 4
             await sleep(delay)
-            print(f"Waited {round(delay, 2)} seconds before claiming.")
+            logger.info(f"Waited {round(delay, 2)} seconds before claiming.")
         elif config["DELAY"] != 0:
+            logger.debug("Manual delay enabled, waiting...")
             await sleep(config["DELAY"])
-            print(f"Waited {config['DELAY']} seconds before claiming.")
+            logger.info(f"Waited {config['DELAY']} seconds before claiming.")
         try:
             if (
                 "ended" in embed.footer.text.lower()
                 and "Trivia time - " not in embed.title
             ):
+                logger.debug("Drop ended, skipping...")
                 return
             elif "An airdrop appears" in embed.title and not config["DISABLE_AIRDROP"]:
+                logger.debug("Airdrop detected, entering...")
                 button = tip_cc_message.components[0].children[0]
                 if "Enter airdrop" in button.label:
                     await button.click()
-                    print(
+                    logger.info(
                         f"Entered airdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "Phrase drop!" in embed.title and not config["DISABLE_PHRASEDROP"]:
+                logger.debug("Phrasedrop detected, entering...")
                 content = embed.description.replace("\n", "").replace("**", "")
                 content = content.split("*")
                 try:
                     content = content[1].replace("​", "").replace("\u200b", "").strip()
                 except IndexError:
+                    logger.exception("Index error occurred, skipping...")
                     pass
                 else:
+                    logger.debug("Typing and sending message...")
                     length = len(content) / config["CPM"] * 60
                     async with original_message.channel.typing():
                         await sleep(length)
                     await original_message.channel.send(content)
-                    print(
+                    logger.info(
                         f"Entered phrasedrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "appeared" in embed.title and not config["DISABLE_REDPACKET"]:
+                logger.debug("Redpacket detected, claiming...")
                 button = tip_cc_message.components[0].children[0]
                 if "envelope" in button.label:
                     await button.click()
-                    print(
+                    logger.info(
                         f"Claimed envelope for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "Math" in embed.title and not config["DISABLE_MATHDROP"]:
+                logger.debug("Mathdrop detected, entering...")
                 content = embed.description.replace("\n", "").replace("**", "")
                 content = content.split("`")
                 try:
                     content = content[1].replace("​", "").replace("\u200b", "")
                 except IndexError:
+                    logger.exception("Index error occurred, skipping...")
                     pass
                 else:
+                    logger.debug("Evaluating math and sending message...")
                     answer = eval(content)
+                    logger.debug(f"Answer: {answer}")
                     length = len(str(answer)) / config["CPM"] * 60
                     async with original_message.channel.typing():
                         await sleep(length)
                     await original_message.channel.send(answer)
-                    print(
+                    logger.info(
                         f"Entered mathdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "Trivia time - " in embed.title and not config["DISABLE_TRIVIADROP"]:
+                logger.debug("Triviadrop detected, entering...")
                 category = embed.title.split("Trivia time - ")[1].strip()
                 bot_question = embed.description.replace("**", "").split("*")[1]
                 async with ClientSession() as session:
@@ -390,28 +447,31 @@ async def on_message(original_message: Message):
                                 for button in buttons:
                                     if button.label.strip() == answer:
                                         await button.click()
-                                print(
+                                logger.info(
                                     f"Entered triviadrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                                 )
                                 return
 
         except AttributeError:
+            logger.exception("Attribute error occurred")
             return
         except HTTPException:
+            logger.exception("HTTP exception occurred")
             return
         except NotFound:
+            logger.exception("Not found exception occurred")
             return
     elif original_message.content.startswith(
         ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
     ) and any(word in original_message.content.lower() for word in banned_words):
-        print("Banned word detected, skipping...")
+        logger.info("Banned word detected, skipping...")
 
 
 if __name__ == "__main__":
     try:
-        client.run(config["TOKEN"])
+        client.run(config["TOKEN"], log_handler=handler, log_formatter=formatter)
     except LoginFailure:
-        print("Invalid token, restart the program.")
+        logger.critical("Invalid token, restart the program.")
         config["TOKEN"] = ""
         with open("config.json", "w") as f:
             dump(config, f, indent=4)

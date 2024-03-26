@@ -92,18 +92,23 @@ except FileNotFoundError:
     config = {
         "TOKEN": "",
         "CPM": 310,
-        "DELAY": 0,
+        "FIRST": True,
+        "id": 0,
+        "channel_id": 0,
         "SMART_DELAY": True,
+        "DELAY": 1,
+        "BANNED_WORDS": ["bot", "ban"],
+        "WHITELIST": [],
+        "BLACKLIST": [],
+        "IGNORE_USERS": [],
+        "WHITELIST_ON": False,
+        "BLACKLIST_ON": False,
         "IGNORE_DROPS_UNDER": 0.0,
         "DISABLE_AIRDROP": False,
         "DISABLE_TRIVIADROP": False,
         "DISABLE_MATHDROP": False,
         "DISABLE_PHRASEDROP": False,
         "DISABLE_REDPACKET": False,
-        "BANNED_WORDS": ["bot", "ban"],
-        "FIRST": True,
-        "id": 0,
-        "channel_id": 0,
     }
     with open("config.json", "w") as f:
         dump(config, f, indent=4)
@@ -206,6 +211,54 @@ if config["FIRST"] == True:
             config["DELAY"] = float(manual_delay)
         else:
             config["DELAY"] = 0
+    enable_whitelist = select(
+        "Do you want to enable whitelist? (This will only enter drops in the servers you specify)",
+        choices=["yes", "no"],
+        qmark="->",
+    ).ask()
+    config["WHITELIST_ON"] = enable_whitelist == "yes"
+    if not config["WHITELIST_ON"]:
+        enable_blacklist = select(
+            "Do you want to enable blacklist? (This will ignore drops in the servers you specify)",
+            choices=["yes", "no"],
+            qmark="->",
+        ).ask()
+        config["BLACKLIST_ON"] = enable_blacklist == "yes"
+        if config["BLACKLIST_ON"]:
+            blacklist = text(
+                "What servers do you want to blacklist? Seperate each server ID with a comma.",
+                validate=lambda x: len(x) > 0
+                and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+                qmark="->",
+            ).ask()
+            if not blacklist:
+                blacklist = []
+            else:
+                blacklist = [int(x) for x in blacklist.split(",")]
+            config["BLACKLIST"] = blacklist
+    else:
+        whitelist = text(
+            "What servers do you want to whitelist? Seperate each server ID with a comma.",
+            validate=lambda x: len(x) > 0
+            and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+            qmark="->",
+        ).ask()
+        if not whitelist:
+            whitelist = []
+        else:
+            whitelist = [int(x) for x in whitelist.split(",")]
+        config["WHITELIST"] = whitelist
+    ignore_users = text(
+        "What users do you want to ignore? Seperate each user ID with a comma.",
+        validate=lambda x: len(x) > 0
+        and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+        qmark="->",
+    ).ask()
+    if not ignore_users:
+        ignore_users = []
+    else:
+        ignore_users = [int(x) for x in ignore_users.split(",")]
+    config["IGNORE_USERS"] = ignore_users
     with open("config.json", "w") as f:
         dump(config, f, indent=4)
     logger.debug("Config saved.")
@@ -316,10 +369,30 @@ async def before_tipping():
 
 @client.event
 async def on_message(original_message: Message):
-    if original_message.content.startswith(
-        ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
-    ) and not any(word in original_message.content.lower() for word in banned_words):
-        logger.debug(f"Detected drop: {original_message.content}")
+    if (
+        original_message.content.startswith(
+            ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
+        )
+        and not any(word in original_message.content.lower() for word in banned_words)
+        and (
+            not config["WHITELIST_ON"]
+            or (
+                config["WHITELIST_ON"]
+                and original_message.guild.id in config["WHITELIST"]
+            )
+        )
+        and (
+            not config["BLACKLIST_ON"]
+            or (
+                config["BLACKLIST_ON"]
+                and original_message.guild.id not in config["BLACKLIST"]
+            )
+        )
+        and original_message.author.id not in config["IGNORE_USERS"]
+    ):
+        logger.debug(
+            f"Detected drop in {original_message.channel.name}: {original_message.content}"
+        )
         try:
             tip_cc_message = await client.wait_for(
                 "message",
@@ -364,11 +437,11 @@ async def on_message(original_message: Message):
                 return
             delay = drop_ends_in / 4
             await sleep(delay)
-            logger.info(f"Waited {round(delay, 2)} seconds before claiming.")
+            logger.info(f"Waited {round(delay, 2)} seconds before proceeding.")
         elif config["DELAY"] != 0:
             logger.debug("Manual delay enabled, waiting...")
             await sleep(config["DELAY"])
-            logger.info(f"Waited {config['DELAY']} seconds before claiming.")
+            logger.info(f"Waited {config['DELAY']} seconds before proceeding.")
         try:
             if (
                 "ended" in embed.footer.text.lower()
@@ -382,7 +455,7 @@ async def on_message(original_message: Message):
                 if "Enter airdrop" in button.label:
                     await button.click()
                     logger.info(
-                        f"Entered airdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                        f"Entered airdrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "Phrase drop!" in embed.title and not config["DISABLE_PHRASEDROP"]:
                 logger.debug("Phrasedrop detected, entering...")
@@ -400,7 +473,7 @@ async def on_message(original_message: Message):
                         await sleep(length)
                     await original_message.channel.send(content)
                     logger.info(
-                        f"Entered phrasedrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                        f"Entered phrasedrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "appeared" in embed.title and not config["DISABLE_REDPACKET"]:
                 logger.debug("Redpacket detected, claiming...")
@@ -408,7 +481,7 @@ async def on_message(original_message: Message):
                 if "envelope" in button.label:
                     await button.click()
                     logger.info(
-                        f"Claimed envelope for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                        f"Claimed envelope in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "Math" in embed.title and not config["DISABLE_MATHDROP"]:
                 logger.debug("Mathdrop detected, entering...")
@@ -428,7 +501,7 @@ async def on_message(original_message: Message):
                         await sleep(length)
                     await original_message.channel.send(answer)
                     logger.info(
-                        f"Entered mathdrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                        f"Entered mathdrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
             elif "Trivia time - " in embed.title and not config["DISABLE_TRIVIADROP"]:
                 logger.debug("Triviadrop detected, entering...")
@@ -448,7 +521,7 @@ async def on_message(original_message: Message):
                                     if button.label.strip() == answer:
                                         await button.click()
                                 logger.info(
-                                    f"Entered triviadrop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                                    f"Entered triviadrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                                 )
                                 return
 
@@ -464,7 +537,9 @@ async def on_message(original_message: Message):
     elif original_message.content.startswith(
         ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
     ) and any(word in original_message.content.lower() for word in banned_words):
-        logger.info("Banned word detected, skipping...")
+        logger.info(
+            f"Banned word detected in {original_message.channel.name}, skipping..."
+        )
 
 
 if __name__ == "__main__":

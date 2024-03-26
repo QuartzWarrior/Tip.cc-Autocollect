@@ -10,6 +10,11 @@
         "bot",
         "ban"
     ],
+    "WHITELIST": [],
+    "BLACKLIST": [],
+    "IGNORE_USERS": [],
+    "WHITELIST_ON": false,
+    "BLACKLIST_ON": false,
     "IGNORE_DROPS_UNDER": 0.0,
     "DISABLE_AIRDROP": false,
     "DISABLE_TRIVIADROP": false,

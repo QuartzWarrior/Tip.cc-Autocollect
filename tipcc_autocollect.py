@@ -100,10 +100,13 @@ except FileNotFoundError:
         "BANNED_WORDS": ["bot", "ban"],
         "WHITELIST": [],
         "BLACKLIST": [],
+        "CHANNEL_BLACKLIST": [],
         "IGNORE_USERS": [],
         "WHITELIST_ON": False,
         "BLACKLIST_ON": False,
+        "CHANNEL_BLACKLIST_ON": False,
         "IGNORE_DROPS_UNDER": 0.0,
+        "IGNORE_TIME_UNDER": 0.0,
         "DISABLE_AIRDROP": False,
         "DISABLE_TRIVIADROP": False,
         "DISABLE_MATHDROP": False,
@@ -192,6 +195,17 @@ if config["FIRST"] == True:
         config["IGNORE_DROPS_UNDER"] = float(ignore_drops_under)
     else:
         config["IGNORE_DROPS_UNDER"] = 0.0
+    ignore_time_under = text(
+        "What is the minimum time you want to ignore?",
+        default="0",
+        qmark="->",
+        validate=lambda x: ((validate_decimal(x) or x.isnumeric()) and float(x) >= 0)
+        or x == "",
+    ).ask()
+    if ignore_time_under != "":
+        config["IGNORE_TIME_UNDER"] = float(ignore_time_under)
+    else:
+        config["IGNORE_TIME_UNDER"] = 0.0
     smart_delay = select(
         "Do you want to enable smart delay? (This will make the bot wait for the drop to end before claiming it)",
         choices=["yes", "no"],
@@ -248,6 +262,24 @@ if config["FIRST"] == True:
         else:
             whitelist = [int(x) for x in whitelist.split(",")]
         config["WHITELIST"] = whitelist
+    enable_blacklist = select(
+        "Do you want to enable channel blacklist? (This will ignore drops in the channels you specify)",
+        choices=["yes", "no"],
+        qmark="->",
+    ).ask()
+    config["CHANNEL_BLACKLIST_ON"] = enable_blacklist == "yes"
+    if config["CHANNEL_BLACKLIST_ON"]:
+        blacklist = text(
+            "What channels do you want to blacklist? Seperate each channel ID with a comma.",
+            validate=lambda x: len(x) > 0
+            and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+            qmark="->",
+        ).ask()
+        if not blacklist:
+            blacklist = []
+        else:
+            blacklist = [int(x) for x in blacklist.split(",")]
+        config["CHANNEL_BLACKLIST"] = blacklist
     ignore_users = text(
         "What users do you want to ignore? Seperate each user ID with a comma.",
         validate=lambda x: len(x) > 0
@@ -388,6 +420,13 @@ async def on_message(original_message: Message):
                 and original_message.guild.id not in config["BLACKLIST"]
             )
         )
+        and (
+            not config["CHANNEL_BLACKLIST_ON"]
+            or (
+                config["CHANNEL_BLACKLIST_ON"]
+                and original_message.channel.id not in config["CHANNEL_BLACKLIST"]
+            )
+        )
         and original_message.author.id not in config["IGNORE_USERS"]
     ):
         logger.debug(
@@ -417,41 +456,56 @@ async def on_message(original_message: Message):
             )
             return
         embed = tip_cc_message.embeds[0]
-        money = float(
-            embed.description.split("≈")[1]
-            .split(")")[0]
-            .strip()
-            .replace("$", "")
-            .replace(",", "")
-        )
+        try:
+            money = float(
+                embed.description.split("≈")[1]
+                .split(")")[0]
+                .strip()
+                .replace("$", "")
+                .replace(",", "")
+            )
+        except IndexError:
+            logger.exception("Index error occurred during money splitting, skipping...")
+            return
         if money < config["IGNORE_DROPS_UNDER"]:
+            logger.info(
+                f"Ignored drop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+            )
+            return
+        logger.debug(f"Money: {money}")
+        logger.debug(f"Drop ends in: {embed.timestamp.timestamp() - time()}")
+        drop_ends_in = embed.timestamp.timestamp() - time()
+        if drop_ends_in < config["IGNORE_TIME_UNDER"]:
             logger.info(
                 f"Ignored drop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
             )
             return
         if config["SMART_DELAY"]:
             logger.debug("Smart delay enabled, waiting...")
-            drop_ends_in = embed.timestamp.timestamp() - time()
             if drop_ends_in < 0:
                 logger.debug("Drop ended, skipping...")
                 return
             delay = drop_ends_in / 4
+            logger.debug(f"Delay: {round(delay, 2)}")
             await sleep(delay)
             logger.info(f"Waited {round(delay, 2)} seconds before proceeding.")
         elif config["DELAY"] != 0:
-            logger.debug("Manual delay enabled, waiting...")
+            logger.debug(f"Manual delay enabled, waiting {config['DELAY']}...")
             await sleep(config["DELAY"])
             logger.info(f"Waited {config['DELAY']} seconds before proceeding.")
         try:
-            if (
-                "ended" in embed.footer.text.lower()
-                and "Trivia time - " not in embed.title
-            ):
+            if "ended" in embed.footer.text.lower():
                 logger.debug("Drop ended, skipping...")
                 return
             elif "An airdrop appears" in embed.title and not config["DISABLE_AIRDROP"]:
                 logger.debug("Airdrop detected, entering...")
-                button = tip_cc_message.components[0].children[0]
+                try:
+                    button = tip_cc_message.components[0].children[0]
+                except IndexError:
+                    logger.exception(
+                        "Index error occurred, meaning the drop most likely ended, skipping..."
+                    )
+                    return
                 if "Enter airdrop" in button.label:
                     await button.click()
                     logger.info(
@@ -477,7 +531,13 @@ async def on_message(original_message: Message):
                     )
             elif "appeared" in embed.title and not config["DISABLE_REDPACKET"]:
                 logger.debug("Redpacket detected, claiming...")
-                button = tip_cc_message.components[0].children[0]
+                try:
+                    button = tip_cc_message.components[0].children[0]
+                except IndexError:
+                    logger.exception(
+                        "Index error occurred, meaning the drop most likely ended, skipping..."
+                    )
+                    return
                 if "envelope" in button.label:
                     await button.click()
                     logger.info(
@@ -495,10 +555,13 @@ async def on_message(original_message: Message):
                 else:
                     logger.debug("Evaluating math and sending message...")
                     answer = eval(content)
+                    if isinstance(answer, float) and answer.is_integer():
+                        answer = int(answer)
                     logger.debug(f"Answer: {answer}")
-                    length = len(str(answer)) / config["CPM"] * 60
-                    async with original_message.channel.typing():
-                        await sleep(length)
+                    if not config["SMART_DELAY"] and config["DELAY"] == 0:
+                        length = len(str(answer)) / config["CPM"] * 60
+                        async with original_message.channel.typing():
+                            await sleep(length)
                     await original_message.channel.send(answer)
                     logger.info(
                         f"Entered mathdrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
@@ -509,14 +572,20 @@ async def on_message(original_message: Message):
                 bot_question = embed.description.replace("**", "").split("*")[1]
                 async with ClientSession() as session:
                     async with session.get(
-                        f"https://quartzwarrior.xyz/bots/tipcc_autocollect/{quote(category)}.csv"
+                        f"https://raw.githubusercontent.com/QuartzWarrior/OTDB-Source/main/{quote(category)}.csv"
                     ) as resp:
                         lines = (await resp.text()).splitlines()
                         for line in lines:
                             question, answer = line.split(",")
                             if bot_question.strip() == unquote(question).strip():
                                 answer = unquote(answer).strip()
-                                buttons = tip_cc_message.components[0].children
+                                try:
+                                    buttons = tip_cc_message.components[0].children
+                                except IndexError:
+                                    logger.exception(
+                                        "Index error occurred, meaning the drop most likely ended, skipping..."
+                                    )
+                                    return
                                 for button in buttons:
                                     if button.label.strip() == answer:
                                         await button.click()
@@ -539,6 +608,38 @@ async def on_message(original_message: Message):
     ) and any(word in original_message.content.lower() for word in banned_words):
         logger.info(
             f"Banned word detected in {original_message.channel.name}, skipping..."
+        )
+    elif original_message.content.startswith(
+        ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
+    ) and (
+        config["WHITELIST_ON"] and original_message.guild.id not in config["WHITELIST"]
+    ):
+        logger.info(
+            f"Whitelist enabled and drop not in whitelist, skipping {original_message.channel.name}..."
+        )
+    elif original_message.content.startswith(
+        ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
+    ) and (config["BLACKLIST_ON"] and original_message.guild.id in config["BLACKLIST"]):
+        logger.info(
+            f"Blacklist enabled and drop in blacklist, skipping {original_message.channel.name}..."
+        )
+    elif original_message.content.startswith(
+        ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
+    ) and (
+        config["CHANNEL_BLACKLIST_ON"]
+        and original_message.channel.id in config["CHANNEL_BLACKLIST"]
+    ):
+        logger.info(
+            f"Channel blacklist enabled and drop in channel blacklist, skipping {original_message.channel.name}..."
+        )
+    elif (
+        original_message.content.startswith(
+            ("$airdrop", "$triviadrop", "$mathdrop", "$phrasedrop", "$redpacket")
+        )
+        and original_message.author.id in config["IGNORE_USERS"]
+    ):
+        logger.info(
+            f"User in ignore list detected in {original_message.channel.name}, skipping..."
         )
 
 

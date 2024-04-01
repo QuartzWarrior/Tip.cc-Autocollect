@@ -4,6 +4,7 @@
     "FIRST": true,
     "id": 0,
     "channel_id": 0,
+    "TARGET_AMOUNT": 0.0,
     "SMART_DELAY": true,
     "DELAY": 1,
     "BANNED_WORDS": [
@@ -19,6 +20,7 @@
     "CHANNEL_BLACKLIST_ON": false,
     "IGNORE_DROPS_UNDER": 0.0,
     "IGNORE_TIME_UNDER": 0.0,
+    "IGNORE_THRESHOLDS": [],
     "DISABLE_AIRDROP": false,
     "DISABLE_TRIVIADROP": false,
     "DISABLE_MATHDROP": false,

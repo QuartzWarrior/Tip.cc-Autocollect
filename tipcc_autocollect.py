@@ -7,6 +7,7 @@ from math import factorial, floor
 from math import fmod as mod
 from math import (gamma, gcd, hypot, log, log1p, log2, log10, pi, pow, sin,
                   sinh, sqrt, tan, tau)
+from random import randint
 from re import compile
 from time import time
 from urllib.parse import quote, unquote
@@ -95,6 +96,7 @@ except FileNotFoundError:
         "FIRST": True,
         "id": 0,
         "channel_id": 0,
+        "TARGET_AMOUNT": 0.0,
         "SMART_DELAY": True,
         "DELAY": 1,
         "BANNED_WORDS": ["bot", "ban"],
@@ -107,6 +109,7 @@ except FileNotFoundError:
         "CHANNEL_BLACKLIST_ON": False,
         "IGNORE_DROPS_UNDER": 0.0,
         "IGNORE_TIME_UNDER": 0.0,
+        "IGNORE_THRESHOLDS": [],
         "DISABLE_AIRDROP": False,
         "DISABLE_TRIVIADROP": False,
         "DISABLE_MATHDROP": False,
@@ -131,6 +134,20 @@ def validate_decimal(decimal):
     if decimal_regex.match(decimal):
         return True
     else:
+        return False
+
+
+def validate_threshold_chance(s):
+    try:
+        threshold, chance = s.split(":")
+        return (
+            validate_decimal(threshold)
+            and chance.isnumeric()
+            and 0 <= int(chance) <= 100
+        )
+    except ValueError:
+        if s == "":
+            return True
         return False
 
 
@@ -206,6 +223,20 @@ if config["FIRST"] == True:
         config["IGNORE_TIME_UNDER"] = float(ignore_time_under)
     else:
         config["IGNORE_TIME_UNDER"] = 0.0
+    ignore_thresholds = text(
+        "Enter your ignore thresholds and chances in the format 'threshold:chance', separated by commas (e.g. '0.10:10,0.20:20')",
+        validate=lambda x: all(validate_threshold_chance(pair) for pair in x.split(","))
+        or x == "",
+        default="",
+        qmark="->",
+    ).ask()
+    if ignore_thresholds != "":
+        config["IGNORE_THRESHOLDS"] = [
+            {"threshold": float(pair.split(":")[0]), "chance": int(pair.split(":")[1])}
+            for pair in ignore_thresholds.split(",")
+        ]
+    else:
+        config["IGNORE_THRESHOLDS"] = []
     smart_delay = select(
         "Do you want to enable smart delay? (This will make the bot wait for the drop to end before claiming it)",
         choices=["yes", "no"],
@@ -241,8 +272,11 @@ if config["FIRST"] == True:
         if config["BLACKLIST_ON"]:
             blacklist = text(
                 "What servers do you want to blacklist? Seperate each server ID with a comma.",
-                validate=lambda x: len(x) > 0
-                and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+                validate=lambda x: (
+                    len(x) > 0
+                    and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
+                )
+                or x == "",
                 qmark="->",
             ).ask()
             if not blacklist:
@@ -253,8 +287,11 @@ if config["FIRST"] == True:
     else:
         whitelist = text(
             "What servers do you want to whitelist? Seperate each server ID with a comma.",
-            validate=lambda x: len(x) > 0
-            and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+            validate=lambda x: (
+                len(x) > 0
+                and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
+            )
+            or x == "",
             qmark="->",
         ).ask()
         if not whitelist:
@@ -271,8 +308,11 @@ if config["FIRST"] == True:
     if config["CHANNEL_BLACKLIST_ON"]:
         blacklist = text(
             "What channels do you want to blacklist? Seperate each channel ID with a comma.",
-            validate=lambda x: len(x) > 0
-            and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+            validate=lambda x: (
+                len(x) > 0
+                and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
+            )
+            or x == "",
             qmark="->",
         ).ask()
         if not blacklist:
@@ -282,8 +322,11 @@ if config["FIRST"] == True:
         config["CHANNEL_BLACKLIST"] = blacklist
     ignore_users = text(
         "What users do you want to ignore? Seperate each user ID with a comma.",
-        validate=lambda x: len(x) > 0
-        and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(",")),
+        validate=lambda x: (
+            len(x) > 0
+            and all(y.isnumeric() and 17 <= len(y) <= 19 for y in x.split(","))
+        )
+        or x == "",
         qmark="->",
     ).ask()
     if not ignore_users:
@@ -291,24 +334,15 @@ if config["FIRST"] == True:
     else:
         ignore_users = [int(x) for x in ignore_users.split(",")]
     config["IGNORE_USERS"] = ignore_users
-    with open("config.json", "w") as f:
-        dump(config, f, indent=4)
-    logger.debug("Config saved.")
-
-if config["id"] == 0:
-    config["id"] = int(
+    user_id = int(
         text(
             "What is your main accounts id?\n\nIf you are sniping from your main, put your main accounts' id.",
             validate=lambda x: x.isnumeric() and 17 <= len(x) <= 19,
             qmark="->",
         ).ask()
     )
-    with open("config.json", "w") as f:
-        dump(config, f, indent=4)
-    logger.debug("ID saved.")
-
-if config["channel_id"] == 0:
-    config["channel_id"] = int(
+    config["id"] = user_id
+    channel_id = int(
         text(
             "What is the channel id where you want your alt to tip your main?\n(Remember, the tip.cc bot has to be in the server with this channel.)\n\nIf None, send 1.",
             validate=lambda x: x.isnumeric() and (17 <= len(x) <= 19 or int(x) == 1),
@@ -316,15 +350,20 @@ if config["channel_id"] == 0:
             qmark="->",
         ).ask()
     )
+    config["channel_id"] = channel_id
+    target_amount = float(
+        text(
+            "What is the target amount you want to tip your main at? Set it to 0 to disable.",
+            validate=lambda x: validate_decimal(x),
+            default="0",
+            qmark="->",
+        ).ask()
+    )
+    config["TARGET_AMOUNT"] = target_amount
     with open("config.json", "w") as f:
         dump(config, f, indent=4)
-    logger.debug("Channel ID saved.")
+    logger.debug("Config saved.")
 
-config["DISABLE_AIRDROP"] = config.get("DISABLE_AIRDROP", False)
-config["DISABLE_TRIVIADROP"] = config.get("DISABLE_TRIVIADROP", False)
-config["DISABLE_MATHDROP"] = config.get("DISABLE_MATHDROP", False)
-config["DISABLE_PHRASEDROP"] = config.get("DISABLE_PHRASEDROP", False)
-config["DISABLE_REDPACKET"] = config.get("DISABLE_REDPACKET", False)
 
 banned_words = set(config["BANNED_WORDS"])
 
@@ -352,6 +391,24 @@ async def tipping():
         check=lambda message: message.author.id == 617037497574359050
         and message.embeds,
     )
+    try:
+        total_money = float(
+            answer.embeds[0]
+            .fields[-1]
+            .value.split("$")[1]
+            .replace(",", "")
+            .replace("**", "")
+            .replace(")", "")
+            .replace("\u200b", "")
+            .strip()
+        )
+    except Exception as e:
+        logger.exception("Error occurred while getting total money, skipping tipping.")
+        total_money = 0.0
+    logger.debug(f"Total money: {total_money}")
+    if total_money < config["TARGET_AMOUNT"]:
+        logger.info("Target amount not reached, skipping tipping.")
+        return
     try:
         pages = int(answer.embeds[0].author.name.split("/")[1].replace(")", ""))
     except:
@@ -397,6 +454,22 @@ async def tipping():
 async def before_tipping():
     logger.info("Waiting for bot to be ready before tipping starts...")
     await client.wait_until_ready()
+
+
+"""
+import random
+
+def should_ignore_drop(drop_value):
+    for threshold in config["IGNORE_THRESHOLDS"]:
+        if drop_value <= threshold["threshold"]:
+            # Generate a random number between 0 and 100
+            random_number = random.randint(0, 100)
+            # If the random number is less than the chance, ignore the drop
+            if random_number < threshold["chance"]:
+                return True
+    # If none of the thresholds caused the drop to be ignored, don't ignore the drop
+    return False
+"""
 
 
 @client.event
@@ -472,6 +545,20 @@ async def on_message(original_message: Message):
                 f"Ignored drop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
             )
             return
+        for threshold in config["IGNORE_THRESHOLDS"]:
+            logger.debug(
+                f"Checking threshold: {threshold['threshold']} with chance: {threshold['chance']}"
+            )
+            if money <= threshold["threshold"]:
+                logger.debug(
+                    f"Drop value {money} is less than or equal to threshold {threshold['threshold']}"
+                )
+                random_number = randint(0, 100)
+                if random_number < threshold["chance"]:
+                    logger.info(
+                        f"Ignored drop from failed threshold for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
+                    )
+                    return
         logger.debug(f"Money: {money}")
         logger.debug(f"Drop ends in: {embed.timestamp.timestamp() - time()}")
         drop_ends_in = embed.timestamp.timestamp() - time()

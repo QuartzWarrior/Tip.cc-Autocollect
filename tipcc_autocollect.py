@@ -14,7 +14,7 @@ from urllib.parse import quote, unquote
 
 from aiohttp import ClientSession
 from art import tprint
-from discord import Client, HTTPException, LoginFailure, Message, NotFound
+from discord import Client, HTTPException, LoginFailure, Message, NotFound, Status
 from discord.ext import tasks
 from questionary import checkbox, select, text
 
@@ -92,6 +92,7 @@ try:
 except FileNotFoundError:
     config = {
         "TOKEN": "",
+        "PRESENCE": "invisible",
         "CPM": 310,
         "FIRST": True,
         "id": 0,
@@ -164,6 +165,17 @@ if config["TOKEN"] == "":
         logger.debug("Token saved.")
 
 if config["FIRST"] == True:
+    config["PRESENCE"] = select(
+        "What do you want your presence to be?",
+        choices=[
+            "online",
+            "idle",
+            "dnd",
+            "invisible",
+        ],
+        default="invisible",
+        qmark="->",
+    ).ask()
     config["CPM"] = int(
         text(
             "What is your CPM (Characters Per Minute)?\nThis is to make the phrase drop collector more legit.\nRemember, the higher the faster!",
@@ -367,7 +379,21 @@ if config["FIRST"] == True:
 
 banned_words = set(config["BANNED_WORDS"])
 
-client = Client()
+client = Client(
+    status=(
+        Status.invisible
+        if config["PRESENCE"] == "invisible"
+        else (
+            Status.online
+            if config["PRESENCE"] == "online"
+            else (
+                Status.idle
+                if config["PRESENCE"] == "idle"
+                else Status.dnd if config["PRESENCE"] == "dnd" else Status.unknown
+            )
+        )
+    )
+)
 
 
 @client.event
@@ -529,17 +555,22 @@ async def on_message(original_message: Message):
             )
             return
         embed = tip_cc_message.embeds[0]
-        try:
-            money = float(
-                embed.description.split("≈")[1]
-                .split(")")[0]
-                .strip()
-                .replace("$", "")
-                .replace(",", "")
-            )
-        except IndexError:
-            logger.exception("Index error occurred during money splitting, skipping...")
-            return
+        if "$" not in embed.description or "≈" not in embed.description:
+            money = 0.0
+        else:
+            try:
+                money = float(
+                    embed.description.split("≈")[1]
+                    .split(")")[0]
+                    .strip()
+                    .replace("$", "")
+                    .replace(",", "")
+                )
+            except IndexError:
+                logger.exception(
+                    "Index error occurred during money splitting, skipping..."
+                )
+                return
         if money < config["IGNORE_DROPS_UNDER"]:
             logger.info(
                 f"Ignored drop for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"

@@ -1,23 +1,29 @@
 {
     "TOKEN": "",
     "PRESENCE": "",
-    "CPM": 310,
+    "CPM": [200, 310],
     "FIRST": true,
     "id": 0,
     "channel_id": 0,
     "TARGET_AMOUNT": 0.0,
     "SMART_DELAY": true,
-    "DELAY": 1,
+    "RANGE_DELAY": false,
+    "DELAY": [
+        0,
+        1
+    ],
     "BANNED_WORDS": [
         "bot",
         "ban"
     ],
     "WHITELIST": [],
     "BLACKLIST": [],
+    "CHANNEL_WHITELIST": [],
     "CHANNEL_BLACKLIST": [],
     "IGNORE_USERS": [],
     "WHITELIST_ON": false,
     "BLACKLIST_ON": false,
+    "CHANNEL_WHITELIST_ON": false,
     "CHANNEL_BLACKLIST_ON": false,
     "IGNORE_DROPS_UNDER": 0.0,
     "IGNORE_TIME_UNDER": 0.0,
@@ -26,5 +32,10 @@
     "DISABLE_TRIVIADROP": false,
     "DISABLE_MATHDROP": false,
     "DISABLE_PHRASEDROP": false,
-    "DISABLE_REDPACKET": false
+    "DISABLE_REDPACKET": false,
+    "DELAY_AIRDROP": true,
+    "DELAY_TRIVIADROP": true,
+    "DELAY_MATHDROP": true,
+    "DELAY_PHRASEDROP": true,
+    "DELAY_REDPACKET": true
 }

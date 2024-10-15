@@ -16,6 +16,11 @@
         "bot",
         "ban"
     ],
+    "MESSAGES": [
+        "thanks",
+        "thank you",
+        "thx"
+    ],
     "WHITELIST": [],
     "BLACKLIST": [],
     "CHANNEL_WHITELIST": [],
@@ -23,6 +28,7 @@
     "IGNORE_USERS": [],
     "WHITELIST_ON": false,
     "BLACKLIST_ON": false,
+    "SEND_MESSAGE": false,
     "CHANNEL_WHITELIST_ON": false,
     "CHANNEL_BLACKLIST_ON": false,
     "IGNORE_DROPS_UNDER": 0.0,

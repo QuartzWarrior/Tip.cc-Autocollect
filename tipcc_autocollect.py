@@ -124,11 +124,13 @@ except FileNotFoundError:
         "RANGE_DELAY": False,
         "DELAY": [0, 1],
         "BANNED_WORDS": ["bot", "ban"],
+        "MESSAGES": [],
         "WHITELIST": [],
         "BLACKLIST": [],
         "CHANNEL_WHITELIST": [],
         "CHANNEL_BLACKLIST": [],
         "IGNORE_USERS": [],
+        "SEND_MESSAGE": False,
         "WHITELIST_ON": False,
         "BLACKLIST_ON": False,
         "CHANNEL_WHITELIST_ON": False,
@@ -353,6 +355,33 @@ if config["FIRST"] == True:
                 config["DELAY"] = [float(manual_delay), float(manual_delay)]
             else:
                 config["DELAY"] = [0, 0]
+    banned_words = text(
+        "What words do you want to ban? Seperate each word with a comma.",
+        validate=lambda x: len(x) > 0 or x == "",
+        qmark="->",
+    ).ask()
+    if not banned_words:
+        banned_words = []
+    else:
+        banned_words = banned_words.split(",")
+    config["BANNED_WORDS"] = banned_words
+    send_messages = select(
+        "Do you want to send messages after claiming a drop?",
+        choices=["yes", "no"],
+        qmark="->",
+    ).ask()
+    config["SEND_MESSAGE"] = send_messages == "yes"
+    if config["SEND_MESSAGE"]:
+        messages = text(
+            "What messages do you want to send after claiming a drop? Seperate each message with a comma.",
+            validate=lambda x: len(x) > 0 or x == "",
+            qmark="->",
+        ).ask()
+        if not messages:
+            messages = []
+        else:
+            messages = messages.split(",")
+        config["MESSAGES"] = messages
     enable_whitelist = select(
         "Do you want to enable whitelist? (This will only enter drops in the servers you specify)",
         choices=["yes", "no"],
@@ -745,6 +774,16 @@ async def on_message(original_message: Message):
                     logger.info(
                         f"Entered airdrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
+                    if config["SEND_MESSAGE"]:
+                        message = config["MESSAGES"][
+                            randint(0, len(config["MESSAGES"]) - 1)
+                        ]
+                        length = len(message) / randint(config["CPM"][0], config["CPM"][1]) * 60
+                        async with original_message.channel.typing():
+                            await sleep(length)
+                        await original_message.channel.send(message)
+                        logger.info(f"Sent message: {message}")
+                    return
             elif "Phrase drop!" in embed.title and not config["DISABLE_PHRASEDROP"]:
                 logger.debug("Phrasedrop detected, entering...")
                 content = embed.description.replace("\n", "").replace("**", "")
@@ -763,6 +802,16 @@ async def on_message(original_message: Message):
                     logger.info(
                         f"Entered phrasedrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
+                    if config["SEND_MESSAGE"]:
+                        message = config["MESSAGES"][
+                            randint(0, len(config["MESSAGES"]) - 1)
+                        ]
+                        length = len(message) / randint(config["CPM"][0], config["CPM"][1]) * 60
+                        async with original_message.channel.typing():
+                            await sleep(length)
+                        await original_message.channel.send(message)
+                        logger.info(f"Sent message: {message}")
+                    return
             elif "appeared" in embed.title and not config["DISABLE_REDPACKET"]:
                 logger.debug("Redpacket detected, claiming...")
                 try:
@@ -777,6 +826,16 @@ async def on_message(original_message: Message):
                     logger.info(
                         f"Claimed envelope in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
+                    if config["SEND_MESSAGE"]:
+                        message = config["MESSAGES"][
+                            randint(0, len(config["MESSAGES"]) - 1)
+                        ]
+                        length = len(message) / randint(config["CPM"][0], config["CPM"][1]) * 60
+                        async with original_message.channel.typing():
+                            await sleep(length)
+                        await original_message.channel.send(message)
+                        logger.info(f"Sent message: {message}")
+                    return
             elif "Math" in embed.title and not config["DISABLE_MATHDROP"]:
                 logger.debug("Mathdrop detected, entering...")
                 content = embed.description.replace("\n", "").replace("**", "")
@@ -800,6 +859,16 @@ async def on_message(original_message: Message):
                     logger.info(
                         f"Entered mathdrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                     )
+                    if config["SEND_MESSAGE"]:
+                        message = config["MESSAGES"][
+                            randint(0, len(config["MESSAGES"]) - 1)
+                        ]
+                        length = len(message) / randint(config["CPM"][0], config["CPM"][1]) * 60
+                        async with original_message.channel.typing():
+                            await sleep(length)
+                        await original_message.channel.send(message)
+                        logger.info(f"Sent message: {message}")
+                    return
             elif "Trivia time - " in embed.title and not config["DISABLE_TRIVIADROP"]:
                 logger.debug("Triviadrop detected, entering...")
                 category = embed.title.split("Trivia time - ")[1].strip()
@@ -826,6 +895,15 @@ async def on_message(original_message: Message):
                                 logger.info(
                                     f"Entered triviadrop in {original_message.channel.name} for {embed.description.split('**')[1]} {embed.description.split('**')[2].split(')')[0].replace(' (','')}"
                                 )
+                                if config["SEND_MESSAGE"]:
+                                    message = config["MESSAGES"][
+                                        randint(0, len(config["MESSAGES"]) - 1)
+                                    ]
+                                    length = len(message) / randint(config["CPM"][0], config["CPM"][1]) * 60
+                                    async with original_message.channel.typing():
+                                        await sleep(length)
+                                    await original_message.channel.send(message)
+                                    logger.info(f"Sent message: {message}")
                                 return
 
         except AttributeError:
